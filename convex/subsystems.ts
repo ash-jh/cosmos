@@ -58,7 +58,12 @@ export const getById = query({
 export const updateStatus = mutation({
   args: {
     id: v.id("subsystems"),
-    status: v.string(),
+    status: v.union(
+      v.literal("nominal"),
+      v.literal("warning"),
+      v.literal("critical"),
+      v.literal("offline")
+    ),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);

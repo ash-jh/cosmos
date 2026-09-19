@@ -22,7 +22,6 @@ const badgeVariants = cva(
     },
     defaultVariants: {
       variant: "default",
-      size: "default",
     },
   }
 );
@@ -38,4 +37,3 @@ function Badge({ className, variant, ...props }: BadgeProps) {
 }
 
 export { Badge, badgeVariants };
-
