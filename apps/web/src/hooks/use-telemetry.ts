@@ -39,7 +39,6 @@ export type TelemetryPacket = {
 
 export type RCAResult = {
   status: "no_issue" | "suspected" | "confirmed_simulation";
-
   subsystem: string | null;
   candidate_cause: string | null;
   confidence: number;
@@ -69,27 +68,37 @@ export type MissionStreamPacket = {
   rca: RCAResult;
 };
 
-const [rca, setRca] = useState<RCAResult | null>(null);
-
 const MAX_HISTORY = 60;
 
 export function useTelemetry() {
-  const [telemetry, setTelemetry] = useState<TelemetryPacket | null>(null);
+  const [telemetry, setTelemetry] =
+    useState<TelemetryPacket | null>(null);
 
-  const [history, setHistory] = useState<TelemetryPacket[]>([]);
+  const [history, setHistory] =
+    useState<TelemetryPacket[]>([]);
 
-  const [anomaly, setAnomaly] = useState<AnomalyResult | null>(null);
+  const [anomaly, setAnomaly] =
+    useState<AnomalyResult | null>(null);
 
-  const [anomalyHistory, setAnomalyHistory] = useState<AnomalyResult[]>([]);
+  const [anomalyHistory, setAnomalyHistory] =
+    useState<AnomalyResult[]>([]);
 
-  const [connected, setConnected] = useState(false);
+  const [rca, setRca] =
+    useState<RCAResult | null>(null);
 
-  const [error, setError] = useState<string | null>(null);
+  const [connected, setConnected] =
+    useState(false);
 
-  const socketRef = useRef<WebSocket | null>(null);
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const socketRef =
+    useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:8000/ws/mission");
+    const socket = new WebSocket(
+      "ws://localhost:8000/ws/mission"
+    );
 
     socketRef.current = socket;
 
@@ -101,11 +110,13 @@ export function useTelemetry() {
 
     socket.onmessage = (event) => {
       try {
-        const packet: MissionStreamPacket = JSON.parse(event.data);
+        const packet: MissionStreamPacket =
+          JSON.parse(event.data);
 
         setTelemetry(packet.telemetry);
 
         setAnomaly(packet.anomaly);
+
         setRca(packet.rca);
 
         setHistory((previous) => {
@@ -128,12 +139,17 @@ export function useTelemetry() {
           return next;
         });
       } catch (err) {
-        console.error("Invalid mission stream packet:", err);
+        console.error(
+          "Invalid mission stream packet:",
+          err
+        );
       }
     };
 
     socket.onerror = () => {
-      setError("Unable to connect to COSMOS mission stream.");
+      setError(
+        "Unable to connect to COSMOS mission stream."
+      );
       setConnected(false);
     };
 

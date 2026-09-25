@@ -78,6 +78,31 @@ export default defineSchema({
     status: v.string(),
   }).index("by_anomaly", ["anomalyId"]),
 
+    missionEvents: defineTable({
+    missionId: v.id("missions"),
+    spacecraftId: v.id("spacecraft"),
+
+    timestamp: v.number(),
+
+    eventType: v.string(),
+    severity: v.string(),
+
+    title: v.string(),
+    message: v.string(),
+
+    source: v.string(),
+
+    anomalyId: v.optional(v.id("anomalyResults")),
+    simulationId: v.optional(v.id("simulationRuns")),
+
+    subsystem: v.optional(v.string()),
+
+    metadata: v.optional(v.any()),
+  })
+    .index("by_spacecraft", ["spacecraftId"])
+    .index("by_mission", ["missionId"])
+    .index("by_timestamp", ["timestamp"]),
+
   faultInjections: defineTable({
     simulationId: v.id("simulationRuns"),
     timestamp: v.number(),

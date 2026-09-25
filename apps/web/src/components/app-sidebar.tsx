@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -29,7 +30,7 @@ import {
 const navigation = [
   {
     title: "Mission Overview",
-    href: "/",
+    href: "/dashboard",
     icon: CircleGauge,
   },
   {
@@ -64,33 +65,67 @@ const navigation = [
   },
 ];
 
+const configuration = [
+  {
+    title: "Mission Configuration",
+    href: "/configuration",
+    icon: Settings,
+  },
+  {
+    title: "Telemetry Channels",
+    href: "/telemetry/channels",
+    icon: Radio,
+  },
+];
+
+function isActivePath(pathname: string, href: string) {
+  if (href === "/") {
+    return pathname === "/";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AppSidebar() {
+  const pathname = usePathname();
+
   return (
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="border-zinc-800"
+      className="quicksand border-r border-white/[0.07] bg-[#070a10] font-[family-name:var(--font-quicksand)]"
     >
-      <SidebarHeader className="border-b border-zinc-800">
+      {/* HEADER */}
+      <SidebarHeader className="border-b border-white/[0.07] bg-[#070a10] px-2 py-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
+              asChild
               size="lg"
-              aschild
-              className="hover:bg-zinc-900"
+              tooltip="COSMOS"
+              className="h-12 rounded-xl px-2 text-white transition-all duration-200 hover:bg-white/[0.045] hover:text-white data-[state=open]:bg-white/[0.07] data-[state=open]:text-white"
             >
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-cyan-400 text-black">
-                  <Satellite className="size-4" />
+                {/* LOGO */}
+                <div className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-white/[0.14]">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_65%)]" />
+
+                  <Satellite
+                    className="relative size-[17px] text-white/80"
+                    strokeWidth={1.5}
+                  />
+
+                  <span className="absolute right-[5px] top-[5px] size-1 rounded-full bg-white/70 shadow-[0_0_7px_rgba(255,255,255,0.5)]" />
                 </div>
 
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="font-semibold">
+                {/* BRAND */}
+                <div className="grid flex-1 text-left leading-none">
+                  <span className="font-[family-name:var(--font-quicksand)] text-[14px] font-semibold tracking-[0.19em] text-white">
                     COSMOS
                   </span>
 
-                  <span className="text-xs text-zinc-500">
-                    Mission Operations
+                  <span className="mt-1.5 font-[family-name:var(--font-quicksand)] text-[9px] font-medium tracking-[0.11em] text-white/25">
+                    MISSION OPERATIONS
                   </span>
                 </div>
               </Link>
@@ -99,23 +134,52 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>
+      {/* CONTENT */}
+      <SidebarContent className="bg-[#070a10] px-2 py-5">
+        {/* MISSION CONTROL */}
+        <SidebarGroup className="p-0">
+          <SidebarGroupLabel className="mb-2 h-auto px-3 font-[family-name:var(--font-quicksand)] text-[8px] font-semibold uppercase tracking-[0.28em] text-white/20">
             Mission Control
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-0.5">
               {navigation.map((item) => {
                 const Icon = item.icon;
+                const active = isActivePath(pathname, item.href);
 
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton aschild>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={item.title}
+                      className={`group relative h-10 rounded-[10px] px-3 font-[family-name:var(--font-quicksand)] text-[11px] font-medium transition-all duration-200 ${
+                        active
+                          ? "bg-white/[0.065] text-white"
+                          : "text-white/38 hover:bg-white/[0.045] hover:text-white/80"
+                      }`}
+                    >
                       <Link href={item.href}>
-                        <Icon />
-                        <span>{item.title}</span>
+                        {/* ACTIVE INDICATOR */}
+                        <span
+                          className={`absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.25)] transition-all duration-200 ${
+                            active
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-30"
+                          }`}
+                        />
+
+                        <Icon
+                          className={`size-[15px] shrink-0 transition-all duration-200 ${
+                            active
+                              ? "text-white/90"
+                              : "text-white/25 group-hover:text-white/60"
+                          }`}
+                          strokeWidth={active ? 1.9 : 1.6}
+                        />
+
+                        <span className="truncate">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -125,39 +189,77 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>
+        {/* CONFIGURATION */}
+        <SidebarGroup className="mt-7 p-0">
+          <SidebarGroupLabel className="mb-2 h-auto px-3 font-[family-name:var(--font-quicksand)] text-[8px] font-semibold uppercase tracking-[0.28em] text-white/20">
             Configuration
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton aschild>
-                  <Link href="/configuration">
-                    <Settings />
-                    <span>Mission Configuration</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            <SidebarMenu className="gap-0.5">
+              {configuration.map((item) => {
+                const Icon = item.icon;
+                const active = isActivePath(pathname, item.href);
 
-              <SidebarMenuItem>
-                <SidebarMenuButton aschild>
-                  <Link href="/telemetry/channels">
-                    <Radio />
-                    <span>Telemetry Channels</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={item.title}
+                      className={`group relative h-10 rounded-[10px] px-3 font-[family-name:var(--font-quicksand)] text-[11px] font-medium transition-all duration-200 ${
+                        active
+                          ? "bg-white/[0.065] text-white"
+                          : "text-white/38 hover:bg-white/[0.045] hover:text-white/80"
+                      }`}
+                    >
+                      <Link href={item.href}>
+                        {/* ACTIVE INDICATOR */}
+                        <span
+                          className={`absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.25)] transition-all duration-200 ${
+                            active
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-30"
+                          }`}
+                        />
+
+                        <Icon
+                          className={`size-[15px] shrink-0 transition-all duration-200 ${
+                            active
+                              ? "text-white/90"
+                              : "text-white/25 group-hover:text-white/60"
+                          }`}
+                          strokeWidth={active ? 1.9 : 1.6}
+                        />
+
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
-        <div className="px-2 py-3 text-xs text-zinc-600">
-          COSMOS Phase I
-        </div>
+      {/* FOOTER */}
+      <SidebarFooter className="border-t border-white/[0.07] bg-[#070a10] px-2 py-3">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="COSMOS Phase I"
+              className="h-9 rounded-[10px] px-3 font-[family-name:var(--font-quicksand)] text-[9px] font-medium uppercase tracking-[0.2em] text-white/20 transition-colors duration-200 hover:bg-white/[0.035] hover:text-white/35"
+            >
+              <span className="relative flex size-1.5 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/10" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-white/45 shadow-[0_0_7px_rgba(255,255,255,0.3)]" />
+              </span>
+
+              <span>COSMOS Phase I</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

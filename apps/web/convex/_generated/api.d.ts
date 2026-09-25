@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as missionEvents from "../missionEvents.js";
 import type * as missions from "../missions.js";
 import type * as organizations from "../organizations.js";
 import type * as seed from "../seed.js";
@@ -21,6 +22,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  missionEvents: typeof missionEvents;
   missions: typeof missions;
   organizations: typeof organizations;
   seed: typeof seed;
