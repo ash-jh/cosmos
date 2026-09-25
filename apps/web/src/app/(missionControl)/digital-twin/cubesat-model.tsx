@@ -1,19 +1,11 @@
 "use client";
 
-import {
-  memo,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-import type {
-  ComponentId,
-  HealthState,
-} from "../lib/subsystem-config";
-import { COMPONENT_LABELS } from "../lib/subsystem-config";
+import type { ComponentId, HealthState } from "./lib/subsystem-config";
+import { COMPONENT_LABELS } from "./lib/subsystem-config";
 
 // ─────────────────────────────────────────────────────────────
 // COSMOS Digital Twin — CubeSat Model
@@ -48,12 +40,35 @@ interface CubeSatModelProps {
 const COLORS = {
   frame: "#B8C2CC",
   frameDark: "#697580",
+  frameEdge: "#D7E0E7",
+
   panel: "#8E9AA5",
   panelDark: "#56616B",
+
   electronics: "#AAB5BF",
   battery: "#D0D7DE",
   metal: "#C4CCD4",
   dark: "#26313A",
+
+  power: "#3F7F88",
+  powerEdge: "#00F2FE",
+
+  obc: "#4C7A86",
+  obcEdge: "#4FACFE",
+
+  adcs: "#566B86",
+  adcsEdge: "#6FA8FF",
+
+  comm: "#536C78",
+  commEdge: "#00D9FF",
+
+  thermal: "#7C6848",
+  thermalEdge: "#FFB020",
+
+  payload: "#536875",
+  payloadEdge: "#8EDCFF",
+
+  batteryEdge: "#00E676",
 
   cyan: "#00F2FE",
   blue: "#4FACFE",
@@ -87,11 +102,7 @@ function Bolt({
   return (
     <mesh position={position}>
       <cylinderGeometry args={[size, size, 0.018, 12]} />
-      <meshStandardMaterial
-        color="#D5DDE3"
-        metalness={0.9}
-        roughness={0.28}
-      />
+      <meshStandardMaterial color="#D5DDE3" metalness={0.9} roughness={0.28} />
     </mesh>
   );
 }
@@ -129,11 +140,7 @@ function Chip({
   return (
     <mesh position={position}>
       <boxGeometry args={size} />
-      <meshStandardMaterial
-        color="#202830"
-        metalness={0.45}
-        roughness={0.38}
-      />
+      <meshStandardMaterial color="#202830" metalness={0.45} roughness={0.38} />
     </mesh>
   );
 }
@@ -209,7 +216,7 @@ function CubeSatFrame() {
             <Bolt position={[x, 0.92, z]} />
             <Bolt position={[x, -0.92, z]} />
           </group>
-        ))
+        )),
       )}
 
       {/* Horizontal frame seams */}
@@ -265,11 +272,7 @@ function SolarPanel({
         return (
           <mesh
             key={index}
-            position={[
-              -0.49 + col * 0.33,
-              -0.68 + row * 0.23,
-              0.027,
-            ]}
+            position={[-0.49 + col * 0.33, -0.68 + row * 0.23, 0.027]}
           >
             <boxGeometry args={[0.29, 0.19, 0.012]} />
             <meshStandardMaterial
@@ -309,11 +312,7 @@ function SolarPanel({
   );
 }
 
-function BatteryMesh({
-  health,
-}: {
-  health: HealthState;
-}) {
+function BatteryMesh({ health }: { health: HealthState }) {
   const faultColor =
     health === "critical"
       ? "#FF4D4D"
@@ -356,10 +355,7 @@ function BatteryMesh({
       </mesh>
 
       {/* Status LED */}
-      <StatusLED
-        position={[0.29, 0.15, 0.325]}
-        color={faultColor}
-      />
+      <StatusLED position={[0.29, 0.15, 0.325]} color={faultColor} />
 
       {/* Fault glow */}
       {health !== "nominal" && (
@@ -374,11 +370,7 @@ function BatteryMesh({
   );
 }
 
-function OBCMesh({
-  health,
-}: {
-  health: HealthState;
-}) {
+function OBCMesh({ health }: { health: HealthState }) {
   return (
     <group>
       {/* PCB */}
@@ -417,85 +409,6 @@ function OBCMesh({
       />
     </group>
   );
-}
-
-function getHealthIntensity(health: HealthState) {
-  switch (health) {
-    case "critical":
-      return 1.25;
-    case "warning":
-      return 0.9;
-    default:
-      return 0.35;
-  }
-}
-
-function getComponentColor(
-  id: ComponentId,
-  health: HealthState,
-  viewMode: CubeSatModelProps["viewMode"]
-) {
-  if (viewMode === "faults") {
-    return getHealthColor(health);
-  }
-
-  switch (id) {
-    case "battery":
-      return COLORS.battery;
-
-    case "power_bus":
-      return COLORS.power;
-
-    case "obc_board":
-      return COLORS.obc;
-
-    case "reaction_wheel":
-    case "imu":
-      return COLORS.adcs;
-
-    case "radio":
-    case "antenna":
-      return COLORS.comm;
-
-    case "thermal_sensor":
-      return COLORS.thermal;
-
-    case "payload_module":
-      return COLORS.payload;
-
-    default:
-      return COLORS.frame;
-  }
-}
-
-function getComponentEdgeColor(id: ComponentId) {
-  switch (id) {
-    case "battery":
-      return COLORS.batteryEdge;
-
-    case "power_bus":
-      return COLORS.powerEdge;
-
-    case "obc_board":
-      return COLORS.obcEdge;
-
-    case "reaction_wheel":
-    case "imu":
-      return COLORS.adcsEdge;
-
-    case "radio":
-    case "antenna":
-      return COLORS.commEdge;
-
-    case "thermal_sensor":
-      return COLORS.thermalEdge;
-
-    case "payload_module":
-      return COLORS.payloadEdge;
-
-    default:
-      return COLORS.frameEdge;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -537,21 +450,14 @@ function InteractiveComponent({
     // Move between normal and exploded positions.
     const targetPosition = exploded ? explodedPosition : position;
 
-    groupRef.current.position.lerp(
-      new THREE.Vector3(...targetPosition),
-      0.08
-    );
+    groupRef.current.position.lerp(new THREE.Vector3(...targetPosition), 0.08);
 
     // Slightly enlarge selected / hovered components.
-    const targetScale = selected
-      ? 1.12
-      : hovered
-        ? 1.06
-        : 1;
+    const targetScale = selected ? 1.12 : hovered ? 1.06 : 1;
 
     groupRef.current.scale.lerp(
       new THREE.Vector3(targetScale, targetScale, targetScale),
-      0.1
+      0.1,
     );
   });
 
@@ -578,16 +484,10 @@ function InteractiveComponent({
           intensity={faulted ? 1.5 : selected ? 0.8 : 0.4}
           distance={1.8}
           color={
-            faulted
-              ? "#ff4d4d"
-              : health === "warning"
-                ? "#ffb020"
-                : "#00f2fe"
+            faulted ? "#ff4d4d" : health === "warning" ? "#ffb020" : "#00f2fe"
           }
         />
       )}
-
-      {faulted && <FaultPulse />}
     </group>
   );
 }
@@ -596,13 +496,7 @@ function InteractiveComponent({
 // Health pulse
 // ─────────────────────────────────────────────────────────────
 
-function FaultPulse({
-  color,
-  critical,
-}: {
-  color: string;
-  critical: boolean;
-}) {
+function FaultPulse({ color, critical }: { color: string; critical: boolean }) {
   const ref = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
@@ -632,19 +526,19 @@ function PowerBusMesh() {
   return (
     <group>
       <mesh>
-        <boxGeometry args={[1.65, 0.18, 1.15]} />
+        <boxGeometry args={[1.75, 2.1, 1.75]} />
         <meshStandardMaterial
-          color={COLORS.power}
-          metalness={0.25}
-          roughness={0.45}
+          color="#AEB9C2"
+          metalness={0.78}
+          roughness={0.32}
+          transparent
+          opacity={0.12}
+          depthWrite={false}
         />
       </mesh>
 
       {[-0.55, 0, 0.55].map((x) => (
-        <mesh
-          key={x}
-          position={[x, 0.11, 0]}
-        >
+        <mesh key={x} position={[x, 0.11, 0]}>
           <boxGeometry args={[0.24, 0.025, 0.8]} />
           <meshBasicMaterial color={COLORS.powerEdge} />
         </mesh>
@@ -778,11 +672,8 @@ function PayloadMesh() {
       </mesh>
 
       {/* Instrument aperture */}
-      <mesh position={[0, 0, 0.59]}>
-        <cylinderGeometry
-          args={[0.34, 0.34, 0.08, 32]}
-          rotation={[Math.PI / 2, 0, 0]}
-        />
+      <mesh position={[0, 0, 0.59]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.34, 0.34, 0.08, 32]} />
         <meshBasicMaterial color="#07131c" />
       </mesh>
 
@@ -828,26 +719,11 @@ function ComponentLabel({
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={2}
-            array={
-              new Float32Array([
-                0,
-                0,
-                0,
-                0.35,
-                0.15,
-                0,
-              ])
-            }
-            itemSize={3}
+            args={[new Float32Array([0, 0, 0, 0.35, 0.15, 0]), 3]}
           />
         </bufferGeometry>
 
-        <lineBasicMaterial
-          color={color}
-          transparent
-          opacity={0.45}
-        />
+        <lineBasicMaterial color={color} transparent opacity={0.45} />
       </line>
     </group>
   );
@@ -929,20 +805,17 @@ export const CubeSatModel = memo(function CubeSatModel({
         explodedPosition: [0, 0, 0] as [number, number, number],
       },
     }),
-    []
+    [],
   );
 
   const health = (id: ComponentId): HealthState =>
     componentHealth[id] ?? "nominal";
 
-  const isSelected = (id: ComponentId) =>
-    selectedComponent === id;
+  const isSelected = (id: ComponentId) => selectedComponent === id;
 
-  const isHovered = (id: ComponentId) =>
-    hoveredComponent === id;
+  const isHovered = (id: ComponentId) => hoveredComponent === id;
 
-  const isFaulted = (id: ComponentId) =>
-    faultedComponents.includes(id);
+  const isFaulted = (id: ComponentId) => faultedComponents.includes(id);
 
   const showStatus =
     viewMode === "faults" ||
@@ -963,7 +836,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("cubesat_frame")}
         hovered={isHovered("cubesat_frame")}
         faulted={isFaulted("cubesat_frame")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -983,16 +855,11 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("solar_panel_left")}
         hovered={isHovered("solar_panel_left")}
         faulted={isFaulted("solar_panel_left")}
-        viewMode={viewMode}
         onClick={onComponentClick}
         exploded={exploded}
         onHover={onComponentHover}
       >
-        <SolarPanel
-  side="left"
-  health={componentHealth.solar_panel_left}
-/>
-
+        <SolarPanel side="left" health={health("solar_panel_left")} />
       </InteractiveComponent>
 
       <InteractiveComponent
@@ -1003,16 +870,11 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("solar_panel_right")}
         hovered={isHovered("solar_panel_right")}
         faulted={isFaulted("solar_panel_right")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
       >
-        
-<SolarPanel
-  side="right"
-  health={componentHealth.solar_panel_right}
-/>
+        <SolarPanel side="right" health={health("solar_panel_right")} />
       </InteractiveComponent>
 
       {/* ─────────────────────────────────────────────── */}
@@ -1027,12 +889,11 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("battery")}
         hovered={isHovered("battery")}
         faulted={isFaulted("battery")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
       >
-        <BatteryMesh />
+        <BatteryMesh health={componentHealth.battery} />
 
         {isFaulted("battery") && (
           <FaultPulse
@@ -1054,7 +915,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("power_bus")}
         hovered={isHovered("power_bus")}
         faulted={isFaulted("power_bus")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1074,14 +934,11 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("obc_board")}
         hovered={isHovered("obc_board")}
         faulted={isFaulted("obc_board")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
       >
-        <OBCMesh
-  health={componentHealth.obc_board}
-/>
+        <OBCMesh health={componentHealth.obc_board} />
 
         {isFaulted("obc_board") && (
           <FaultPulse
@@ -1103,7 +960,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("reaction_wheel")}
         hovered={isHovered("reaction_wheel")}
         faulted={isFaulted("reaction_wheel")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1126,7 +982,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("imu")}
         hovered={isHovered("imu")}
         faulted={isFaulted("imu")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1146,7 +1001,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("radio")}
         hovered={isHovered("radio")}
         faulted={isFaulted("radio")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1169,7 +1023,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("antenna")}
         hovered={isHovered("antenna")}
         faulted={isFaulted("antenna")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1189,7 +1042,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("thermal_sensor")}
         hovered={isHovered("thermal_sensor")}
         faulted={isFaulted("thermal_sensor")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
@@ -1216,7 +1068,6 @@ export const CubeSatModel = memo(function CubeSatModel({
         selected={isSelected("payload_module")}
         hovered={isHovered("payload_module")}
         faulted={isFaulted("payload_module")}
-        viewMode={viewMode}
         exploded={exploded}
         onClick={onComponentClick}
         onHover={onComponentHover}
