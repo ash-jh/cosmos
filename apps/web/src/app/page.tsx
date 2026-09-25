@@ -218,7 +218,7 @@ export default function HomePage() {
               </p>
 
               <Link
-                href="/simulation"
+                href="/dashboard"
                 className="group mt-7 inline-flex items-center gap-3 border-b border-white/20 pb-2 text-xs font-medium text-white transition hover:border-white/60"
               >
                 Enter the simulation
