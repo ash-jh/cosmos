@@ -71,34 +71,33 @@ export type MissionStreamPacket = {
 const MAX_HISTORY = 60;
 
 export function useTelemetry() {
-  const [telemetry, setTelemetry] =
-    useState<TelemetryPacket | null>(null);
+  const [telemetry, setTelemetry] = useState<TelemetryPacket | null>(null);
 
-  const [history, setHistory] =
-    useState<TelemetryPacket[]>([]);
+  const [history, setHistory] = useState<TelemetryPacket[]>([]);
 
-  const [anomaly, setAnomaly] =
-    useState<AnomalyResult | null>(null);
+  const [anomaly, setAnomaly] = useState<AnomalyResult | null>(null);
 
-  const [anomalyHistory, setAnomalyHistory] =
-    useState<AnomalyResult[]>([]);
+  const [anomalyHistory, setAnomalyHistory] = useState<AnomalyResult[]>([]);
 
-  const [rca, setRca] =
-    useState<RCAResult | null>(null);
+  const [rca, setRca] = useState<RCAResult | null>(null);
 
-  const [connected, setConnected] =
-    useState(false);
+  const [connected, setConnected] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const socketRef =
-    useRef<WebSocket | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const socket = new WebSocket(
-      "ws://localhost:8000/ws/mission"
-    );
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+    if (!API_URL) {
+      setError("COSMOS backend URL is not configured.");
+      return;
+    }
+
+    const wsUrl = API_URL.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+
+    const socket = new WebSocket(`${wsUrl}/ws/mission`);
 
     socketRef.current = socket;
 
@@ -110,8 +109,7 @@ export function useTelemetry() {
 
     socket.onmessage = (event) => {
       try {
-        const packet: MissionStreamPacket =
-          JSON.parse(event.data);
+        const packet: MissionStreamPacket = JSON.parse(event.data);
 
         setTelemetry(packet.telemetry);
 
@@ -139,17 +137,12 @@ export function useTelemetry() {
           return next;
         });
       } catch (err) {
-        console.error(
-          "Invalid mission stream packet:",
-          err
-        );
+        console.error("Invalid mission stream packet:", err);
       }
     };
 
     socket.onerror = () => {
-      setError(
-        "Unable to connect to COSMOS mission stream."
-      );
+      setError("Unable to connect to COSMOS mission stream.");
       setConnected(false);
     };
 
