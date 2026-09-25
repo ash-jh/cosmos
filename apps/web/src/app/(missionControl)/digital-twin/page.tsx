@@ -5,8 +5,10 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
+
 import {
   Activity,
   AlertTriangle,
@@ -15,7 +17,6 @@ import {
   Check,
   ChevronRight,
   CircleDot,
-  Cpu,
   Crosshair,
   Gauge,
   Layers3,
@@ -43,6 +44,32 @@ import {
 } from "./lib/subsystem-config";
 
 import { useTelemetry } from "@/hooks/use-telemetry";
+
+/* ─────────────────────────────────────────────────────────────
+   Derived Types
+───────────────────────────────────────────────────────────── */
+
+type TwinState = ReturnType<typeof useTwinState>["state"];
+
+type TelemetryPacket = NonNullable<
+  ReturnType<typeof useTelemetry>["telemetry"]
+>;
+
+type TelemetryData = TelemetryPacket["telemetry"];
+
+type FaultScenario =
+  (typeof FAULT_SCENARIOS)[keyof typeof FAULT_SCENARIOS];
+
+type SelectedAction = NonNullable<
+  TwinState["selectedAction"]
+>;
+
+type TelemetryRow = {
+  key: string;
+  label: string;
+  unit: string;
+  formatted: string;
+};
 
 /* ─────────────────────────────────────────────────────────────
    Helpers
@@ -89,17 +116,18 @@ const MISSION_STATE_LABELS: Record<string, string> = {
   RECOVERY_FAILED: "RECOVERY FAILED",
 };
 
-function formatNumber(value: unknown, digits = 2) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
-  return value.toFixed(digits);
-}
+function formatNumber(
+  value: unknown,
+  digits = 2
+): string {
+  if (
+    typeof value !== "number" ||
+    Number.isNaN(value)
+  ) {
+    return "—";
+  }
 
-function healthForSubsystem(
-  health: Record<SubsystemId, HealthState>,
-  subsystem: SubsystemId | null
-): HealthState {
-  if (!subsystem) return "nominal";
-  return health[subsystem] ?? "nominal";
+  return value.toFixed(digits);
 }
 
 function getComponentHealth(
@@ -107,16 +135,8 @@ function getComponentHealth(
   subsystemHealth: Record<SubsystemId, HealthState>
 ): HealthState {
   const subsystem = COMPONENT_SUBSYSTEM_MAP[component];
+
   return subsystemHealth[subsystem] ?? "nominal";
-}
-
-function getChannelConfig(channel: string) {
-  for (const subsystem of Object.values(SUBSYSTEM_CONFIGS)) {
-    const found = subsystem.channels.find((item) => item.key === channel);
-    if (found) return found;
-  }
-
-  return null;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -151,32 +171,41 @@ export default function DigitalTwinPage() {
   } = useTwinState();
 
   /* ─────────────────────────────────────────────────────────
+     IMPORTANT:
+     useTelemetry returns a TelemetryPacket.
+     Twin state expects TelemetryData.
+     Therefore always use telemetry.telemetry.
+  ──────────────────────────────────────────────────────────── */
+
+  const telemetryData = useMemo<TelemetryData | null>(() => {
+    if (!telemetry) return null;
+
+    return telemetry.telemetry;
+  }, [telemetry]);
+
+  /* ─────────────────────────────────────────────────────────
      Telemetry → Twin state
   ──────────────────────────────────────────────────────────── */
 
   useEffect(() => {
-    if (!telemetry) return;
+    if (!telemetryData) return;
 
-    processHealth(telemetry);
-  }, [telemetry, processHealth]);
+    processHealth(telemetryData);
+  }, [telemetryData, processHealth]);
 
   useEffect(() => {
-    if (!rca || !telemetry) return;
+    if (!rca || !telemetryData) return;
 
-    processAnomaly(rca, telemetry);
-  }, [rca, telemetry, processAnomaly]);
+    processAnomaly(rca, telemetryData);
+  }, [rca, telemetryData, processAnomaly]);
 
   /* ─────────────────────────────────────────────────────────
      Recovery animation
-
-     The backend telemetry remains untouched.
-     We interpolate the Digital Twin's displayed state locally
-     toward the selected action's simulated target.
   ──────────────────────────────────────────────────────────── */
 
-  const recoveryTimerRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
-  );
+  const recoveryTimerRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
 
   useEffect(() => {
     if (state.missionState !== "RECOVERY") {
@@ -184,32 +213,48 @@ export default function DigitalTwinPage() {
         clearInterval(recoveryTimerRef.current);
         recoveryTimerRef.current = null;
       }
+
       return;
     }
 
-    if (!telemetry || state.recoveryProgress.length === 0) return;
+    if (
+      !telemetryData ||
+      state.recoveryProgress.length === 0
+    ) {
+      return;
+    }
 
     let progress = 0;
 
     recoveryTimerRef.current = setInterval(() => {
       progress += 0.08;
 
-      const simulatedTelemetry = {
-        ...telemetry,
+      const simulatedTelemetry: TelemetryData = {
+        ...telemetryData,
       };
 
       for (const item of state.recoveryProgress) {
-        const source =
-          telemetry[item.channel as keyof typeof telemetry];
+        const channel =
+          item.channel as keyof TelemetryData;
 
-        if (typeof source !== "number") continue;
+        const source = telemetryData[channel];
+
+        if (typeof source !== "number") {
+          continue;
+        }
 
         const next =
-          source + (item.targetValue - source) * Math.min(progress, 1);
+          source +
+          (item.targetValue - source) *
+            Math.min(progress, 1);
 
-        (
-          simulatedTelemetry as Record<string, unknown>
-        )[item.channel] = next;
+        const mutableTelemetry =
+          simulatedTelemetry as unknown as Record<
+            string,
+            unknown
+          >;
+
+        mutableTelemetry[item.channel] = next;
       }
 
       advanceRecovery(simulatedTelemetry);
@@ -231,7 +276,7 @@ export default function DigitalTwinPage() {
   }, [
     state.missionState,
     state.recoveryProgress,
-    telemetry,
+    telemetryData,
     advanceRecovery,
   ]);
 
@@ -240,66 +285,81 @@ export default function DigitalTwinPage() {
   ──────────────────────────────────────────────────────────── */
 
   useEffect(() => {
-    if (state.missionState !== "VERIFICATION") return;
-    if (!telemetry) return;
+    if (state.missionState !== "VERIFICATION") {
+      return;
+    }
+
+    if (!telemetryData) {
+      return;
+    }
 
     const timer = setTimeout(() => {
-      runVerification(telemetry);
+      runVerification(telemetryData);
     }, 900);
 
     return () => clearTimeout(timer);
-  }, [state.missionState, telemetry, runVerification]);
+  }, [
+    state.missionState,
+    telemetryData,
+    runVerification,
+  ]);
 
   /* ─────────────────────────────────────────────────────────
      Effective telemetry
-
-     During simulated recovery, override values are displayed
-     alongside the real stream without mutating backend data.
   ──────────────────────────────────────────────────────────── */
 
-  const effectiveTelemetry = useMemo(() => {
+  const effectiveTelemetry = useMemo<
+    Record<string, unknown>
+  >(() => {
     return {
-      ...(telemetry ?? {}),
+      ...(telemetryData ?? {}),
       ...(state.telemetryOverride ?? {}),
     };
-  }, [telemetry, state.telemetryOverride]);
+  }, [telemetryData, state.telemetryOverride]);
 
   /* ─────────────────────────────────────────────────────────
      Active fault
   ──────────────────────────────────────────────────────────── */
 
-  const activeFault = state.activeFaultId
-    ? FAULT_SCENARIOS[state.activeFaultId]
-    : null;
+  const activeFault: FaultScenario | null =
+    state.activeFaultId
+      ? FAULT_SCENARIOS[state.activeFaultId] ?? null
+      : null;
 
-  const detectedFault = state.detectedFaultId
-    ? FAULT_SCENARIOS[state.detectedFaultId]
-    : null;
+  const detectedFault: FaultScenario | null =
+    state.detectedFaultId
+      ? FAULT_SCENARIOS[state.detectedFaultId] ?? null
+      : null;
 
-  const faultedComponents = useMemo<ComponentId[]>(() => {
-    if (!activeFault) return [];
+  const faultedComponents = useMemo<ComponentId[]>(
+    () => {
+      if (!activeFault) return [];
 
-    return activeFault.affectedComponents;
-  }, [activeFault]);
+      return activeFault.affectedComponents;
+    },
+    [activeFault]
+  );
 
   /* ─────────────────────────────────────────────────────────
      Component health
   ──────────────────────────────────────────────────────────── */
 
-  const componentHealth = useMemo(() => {
-    const result = {} as Record<ComponentId, HealthState>;
+  const componentHealth =
+    useMemo<Record<ComponentId, HealthState>>(() => {
+      const result =
+        {} as Record<ComponentId, HealthState>;
 
-    (
-      Object.keys(COMPONENT_LABELS) as ComponentId[]
-    ).forEach((component) => {
-      result[component] = getComponentHealth(
-        component,
-        state.subsystemHealth
-      );
-    });
+      (
+        Object.keys(COMPONENT_LABELS) as ComponentId[]
+      ).forEach((component: ComponentId) => {
+        result[component] = getComponentHealth(
+          component,
+          state.subsystemHealth
+        );
+      });
 
-    return result;
-  }, [state.subsystemHealth]);
+      return result;
+    }, [state.subsystemHealth]);
 
   /* ─────────────────────────────────────────────────────────
      Selected component
@@ -311,13 +371,15 @@ export default function DigitalTwinPage() {
   const selectedComponent =
     state.selectedComponent ?? null;
 
-  const selectedComponentSubsystem = selectedComponent
-    ? COMPONENT_SUBSYSTEM_MAP[selectedComponent]
-    : null;
+  const selectedComponentSubsystem =
+    selectedComponent
+      ? COMPONENT_SUBSYSTEM_MAP[selectedComponent]
+      : null;
 
-  const selectedSubsystemConfig = selectedSubsystem
-    ? SUBSYSTEM_CONFIGS[selectedSubsystem]
-    : null;
+  const selectedSubsystemConfig =
+    selectedSubsystem
+      ? SUBSYSTEM_CONFIGS[selectedSubsystem]
+      : null;
 
   const selectedComponentHealth = selectedComponent
     ? componentHealth[selectedComponent]
@@ -332,7 +394,8 @@ export default function DigitalTwinPage() {
 
   const handleComponentClick = useCallback(
     (id: ComponentId) => {
-      const subsystem = COMPONENT_SUBSYSTEM_MAP[id];
+      const subsystem =
+        COMPONENT_SUBSYSTEM_MAP[id];
 
       selectComponent(id);
 
@@ -345,7 +408,11 @@ export default function DigitalTwinPage() {
         "info"
       );
     },
-    [selectComponent, selectSubsystem, addTimelineEvent]
+    [
+      selectComponent,
+      selectSubsystem,
+      addTimelineEvent,
+    ]
   );
 
   const handleInvestigate = useCallback(() => {
@@ -364,47 +431,56 @@ export default function DigitalTwinPage() {
      Telemetry rows
   ──────────────────────────────────────────────────────────── */
 
-  const telemetryRows = useMemo(() => {
-    if (!selectedSubsystemConfig) return [];
+  const telemetryRows = useMemo<TelemetryRow[]>(() => {
+    if (!selectedSubsystemConfig) {
+      return [];
+    }
 
-    return selectedSubsystemConfig.channels.map((channel) => {
-      const value =
-        effectiveTelemetry[
-          channel.key as keyof typeof effectiveTelemetry
-        ];
+    return selectedSubsystemConfig.channels.map(
+      (channel): TelemetryRow => {
+        const value =
+          effectiveTelemetry[channel.key];
 
-      return {
-        ...channel,
-        value:
-          typeof value === "number"
-            ? value
-            : null,
-        formatted:
-          typeof value === "number"
-            ? channel.format
-              ? channel.format(value)
-              : value.toFixed(2)
-            : "—",
-      };
-    });
-  }, [selectedSubsystemConfig, effectiveTelemetry]);
+        return {
+          key: channel.key,
+          label: channel.label,
+          unit: channel.unit ?? "",
+          value:
+            typeof value === "number"
+              ? value
+              : undefined,
+          formatted:
+            typeof value === "number"
+              ? channel.format
+                ? channel.format(value)
+                : value.toFixed(2)
+              : "—",
+        } as TelemetryRow;
+      }
+    );
+  }, [
+    selectedSubsystemConfig,
+    effectiveTelemetry,
+  ]);
 
   /* ─────────────────────────────────────────────────────────
      Overall spacecraft status
   ──────────────────────────────────────────────────────────── */
 
-  const healthValues = Object.values(state.subsystemHealth);
+  const healthValues = Object.values(
+    state.subsystemHealth
+  );
 
   const criticalCount = healthValues.filter(
-    (h) => h === "critical"
+    (health: HealthState) => health === "critical"
   ).length;
 
   const warningCount = healthValues.filter(
-    (h) => h === "warning"
+    (health: HealthState) => health === "warning"
   ).length;
 
   const nominalCount = healthValues.filter(
-    (h) => h === "nominal"
+    (health: HealthState) => health === "nominal"
   ).length;
 
   const overallHealth: HealthState =
@@ -422,23 +498,27 @@ export default function DigitalTwinPage() {
   ──────────────────────────────────────────────────────────── */
 
   const recoveryPercent = useMemo(() => {
-    if (state.recoveryProgress.length === 0) return 0;
+    if (state.recoveryProgress.length === 0) {
+      return 0;
+    }
 
-    const recovered = state.recoveryProgress.filter(
-      (item) => item.recovered
-    ).length;
+    const recovered =
+      state.recoveryProgress.filter(
+        (item) => item.recovered
+      ).length;
 
     return Math.round(
-      (recovered / state.recoveryProgress.length) * 100
+      (recovered /
+        state.recoveryProgress.length) *
+        100
     );
   }, [state.recoveryProgress]);
 
   return (
     <div className="min-h-screen bg-[#05070d] text-white">
       <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-5 px-4 py-5 md:px-6 lg:px-8">
-        {/* ═══════════════════════════════════════════════════
-            HEADER
-        ═══════════════════════════════════════════════════ */}
+
+        {/* HEADER */}
 
         <header className="flex flex-col gap-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
@@ -496,33 +576,41 @@ export default function DigitalTwinPage() {
                 variant="outline"
                 className={`border ${overallHealthStyle.border} ${overallHealthStyle.bg} ${overallHealthStyle.text} text-[9px] tracking-[0.12em]`}
               >
-                {MISSION_STATE_LABELS[state.missionState]}
+                {MISSION_STATE_LABELS[
+                  state.missionState
+                ] ?? state.missionState}
               </Badge>
             </div>
           </div>
-
-          {/* ────────────────────────────────────────────────
-              Spacecraft status row
-          ──────────────────────────────────────────────── */}
 
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.04] sm:grid-cols-4">
             <StatusMetric
               label="SPACECRAFT"
               value="COSMOS-SAT-01"
-              icon={<Satellite className="h-3.5 w-3.5" />}
+              icon={
+                <Satellite className="h-3.5 w-3.5" />
+              }
             />
 
             <StatusMetric
               label="TELEMETRY"
-              value={connected ? "STREAMING" : "OFFLINE"}
-              icon={<Activity className="h-3.5 w-3.5" />}
-              status={connected ? "nominal" : "warning"}
+              value={
+                connected ? "STREAMING" : "OFFLINE"
+              }
+              icon={
+                <Activity className="h-3.5 w-3.5" />
+              }
+              status={
+                connected ? "nominal" : "warning"
+              }
             />
 
             <StatusMetric
               label="SUBSYSTEMS"
               value={`${nominalCount} / 6 NOMINAL`}
-              icon={<Layers3 className="h-3.5 w-3.5" />}
+              icon={
+                <Layers3 className="h-3.5 w-3.5" />
+              }
               status={overallHealth}
             />
 
@@ -533,7 +621,9 @@ export default function DigitalTwinPage() {
                   ? "01 ACTIVE"
                   : "00 ACTIVE"
               }
-              icon={<AlertTriangle className="h-3.5 w-3.5" />}
+              icon={
+                <AlertTriangle className="h-3.5 w-3.5" />
+              }
               status={
                 state.activeFaultId
                   ? "critical"
@@ -543,12 +633,11 @@ export default function DigitalTwinPage() {
           </div>
         </header>
 
-        {/* ═══════════════════════════════════════════════════
-            ANOMALY BANNER
-        ═══════════════════════════════════════════════════ */}
+        {/* ANOMALY BANNER */}
 
         {detectedFault &&
-          state.missionState === "ANOMALY_DETECTED" && (
+          state.missionState ===
+            "ANOMALY_DETECTED" && (
             <section className="flex flex-col gap-4 rounded-xl border border-red-400/20 bg-red-400/[0.045] p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-400/10">
@@ -562,7 +651,8 @@ export default function DigitalTwinPage() {
                     </span>
 
                     <span className="text-[9px] text-white/25">
-                      {state.diagnosticConfidence}% confidence
+                      {state.diagnosticConfidence}%
+                      confidence
                     </span>
                   </div>
 
@@ -571,7 +661,8 @@ export default function DigitalTwinPage() {
                   </h2>
 
                   <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/40">
-                    {detectedFault.telemetryEffects[0]?.description ??
+                    {detectedFault.telemetryEffects[0]
+                      ?.description ??
                       "Telemetry has moved outside the expected operating envelope."}
                   </p>
                 </div>
@@ -588,18 +679,14 @@ export default function DigitalTwinPage() {
             </section>
           )}
 
-        {/* ═══════════════════════════════════════════════════
-            MAIN WORKSPACE
-        ═══════════════════════════════════════════════════ */}
+        {/* MAIN WORKSPACE */}
 
         <main className="grid min-h-[680px] grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          {/* ────────────────────────────────────────────────
-              LEFT — 3D TWIN
-          ──────────────────────────────────────────────── */}
+
+          {/* LEFT — 3D TWIN */}
 
           <section className="flex min-h-[680px] flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* View mode */}
               <div className="flex items-center rounded-lg border border-white/[0.08] bg-white/[0.025] p-1">
                 {(
                   [
@@ -610,6 +697,7 @@ export default function DigitalTwinPage() {
                 ).map(([mode, label]) => (
                   <button
                     key={mode}
+                    type="button"
                     onClick={() => setViewMode(mode)}
                     className={`rounded-md px-3 py-1.5 text-[9px] font-medium uppercase tracking-[0.12em] transition-all ${
                       state.viewMode === mode
@@ -654,34 +742,48 @@ export default function DigitalTwinPage() {
             <div className="relative min-h-[600px] flex-1">
               <DigitalTwinScene
                 exploded={state.explodedView}
-                selectedSubsystem={state.selectedSubsystem}
-                selectedComponent={state.selectedComponent}
-                hoveredComponent={state.hoveredComponent}
+                selectedSubsystem={
+                  state.selectedSubsystem
+                }
+                selectedComponent={
+                  state.selectedComponent
+                }
+                hoveredComponent={
+                  state.hoveredComponent
+                }
                 componentHealth={componentHealth}
                 faultedComponents={faultedComponents}
                 viewMode={state.viewMode}
-                onComponentClick={handleComponentClick}
-                onComponentHover={setHoveredComponent}
+                onComponentClick={
+                  handleComponentClick
+                }
+                onComponentHover={
+                  setHoveredComponent
+                }
                 onSubsystemSelect={selectSubsystem}
               />
 
-              {/* Fault propagation overlay */}
               {activeFault &&
                 state.missionState !== "NOMINAL" && (
                   <FaultPropagationOverlay
                     faultName={activeFault.name}
-                    chain={activeFault.propagationChain}
-                    missionState={state.missionState}
+                    chain={
+                      activeFault.propagationChain
+                    }
+                    missionState={
+                      state.missionState
+                    }
                   />
                 )}
 
-              {/* Hover label */}
               {state.hoveredComponent && (
                 <div className="pointer-events-none absolute left-5 top-14 rounded-lg border border-white/[0.09] bg-[#080b12]/95 px-3 py-2 shadow-2xl backdrop-blur-md">
                   <div className="text-[9px] uppercase tracking-[0.16em] text-white/30">
-                    {COMPONENT_SUBSYSTEM_MAP[
-                      state.hoveredComponent
-                    ]}
+                    {
+                      COMPONENT_SUBSYSTEM_MAP[
+                        state.hoveredComponent
+                      ]
+                    }
                   </div>
 
                   <div className="mt-0.5 text-xs font-medium text-white">
@@ -694,11 +796,12 @@ export default function DigitalTwinPage() {
                 </div>
               )}
 
-              {/* Investigation marker */}
-              {(state.missionState === "INVESTIGATING" ||
-                state.missionState === "FAULT_ISOLATED") &&
+              {(state.missionState ===
+                "INVESTIGATING" ||
+                state.missionState ===
+                  "FAULT_ISOLATED") &&
                 state.selectedComponent && (
-                  <div className="pointer-events-none absolute left-5 bottom-5 flex items-center gap-2 rounded-lg border border-cyan-400/15 bg-[#080b12]/90 px-3 py-2 backdrop-blur-md">
+                  <div className="pointer-events-none absolute bottom-5 left-5 flex items-center gap-2 rounded-lg border border-cyan-400/15 bg-[#080b12]/90 px-3 py-2 backdrop-blur-md">
                     <Crosshair className="h-3.5 w-3.5 text-cyan-300" />
 
                     <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-cyan-300">
@@ -714,14 +817,14 @@ export default function DigitalTwinPage() {
             </div>
           </section>
 
-          {/* ────────────────────────────────────────────────
-              RIGHT — DIAGNOSTIC PANEL
-          ──────────────────────────────────────────────── */}
+          {/* RIGHT — DIAGNOSTIC PANEL */}
 
           <aside className="flex min-h-[680px] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.018]">
             {selectedComponent ? (
               <DiagnosticPanel
-                selectedComponent={selectedComponent}
+                selectedComponent={
+                  selectedComponent
+                }
                 selectedSubsystem={
                   selectedComponentSubsystem
                 }
@@ -731,8 +834,12 @@ export default function DigitalTwinPage() {
                 activeFault={activeFault}
                 state={state}
                 onIsolate={handleIsolate}
-                onSelectAction={selectCorrectionAction}
-                onApplyAction={applyCorrectionAction}
+                onSelectAction={
+                  selectCorrectionAction
+                }
+                onApplyAction={
+                  applyCorrectionAction
+                }
               />
             ) : (
               <SpacecraftStatusPanel
@@ -747,14 +854,14 @@ export default function DigitalTwinPage() {
           </aside>
         </main>
 
-        {/* ═══════════════════════════════════════════════════
-            RECOVERY PANEL
-        ═══════════════════════════════════════════════════ */}
+        {/* RECOVERY PANEL */}
 
         {(state.missionState === "RECOVERY" ||
-          state.missionState === "VERIFICATION" ||
+          state.missionState ===
+            "VERIFICATION" ||
           state.missionState === "RECOVERED" ||
-          state.missionState === "RECOVERY_FAILED") && (
+          state.missionState ===
+            "RECOVERY_FAILED") && (
           <RecoveryPanel
             state={state}
             recoveryPercent={recoveryPercent}
@@ -763,9 +870,7 @@ export default function DigitalTwinPage() {
           />
         )}
 
-        {/* ═══════════════════════════════════════════════════
-            EVENT STREAM
-        ═══════════════════════════════════════════════════ */}
+        {/* EVENT STREAM */}
 
         <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.018]">
           <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
@@ -817,7 +922,7 @@ function StatusMetric({
 }: {
   label: string;
   value: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   status?: HealthState;
 }) {
   const style = HEALTH_STYLES[status];
@@ -861,48 +966,46 @@ function DiagnosticPanel({
   selectedSubsystem: SubsystemId | null;
   health: HealthState;
   healthStyle: (typeof HEALTH_STYLES)[HealthState];
-  telemetryRows: {
-    key: string;
-    label: string;
-    unit: string;
-    formatted: string;
-  }[];
-  activeFault: ReturnType<
-    typeof FAULT_SCENARIOS[keyof typeof FAULT_SCENARIOS]
-  > | null;
-  state: ReturnType<typeof useTwinState>["state"];
+  telemetryRows: TelemetryRow[];
+  activeFault: FaultScenario | null;
+  state: TwinState;
   onIsolate: () => void;
   onSelectAction: (
-    action: NonNullable<
-      ReturnType<typeof useTwinState>["state"]["selectedAction"]
-    >
+    action: SelectedAction
   ) => void;
   onApplyAction: () => void;
 }) {
   const subsystem =
-    selectedSubsystem &&
-    SUBSYSTEM_CONFIGS[selectedSubsystem];
+    selectedSubsystem
+      ? SUBSYSTEM_CONFIGS[selectedSubsystem]
+      : null;
 
   const canIsolate =
-    !!activeFault &&
+    activeFault !== null &&
     state.missionState === "INVESTIGATING";
 
   const canIntervene =
-    !!activeFault &&
+    activeFault !== null &&
     state.missionState === "FAULT_ISOLATED";
 
   return (
     <div className="flex h-full flex-col">
+
       {/* Header */}
+
       <div className="border-b border-white/[0.07] p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[8px] uppercase tracking-[0.2em] text-white/25">
-              {selectedSubsystem}
+              {selectedSubsystem ?? "UNKNOWN"}
             </div>
 
             <h2 className="mt-1 text-base font-semibold tracking-tight">
-              {COMPONENT_LABELS[selectedComponent]}
+              {
+                COMPONENT_LABELS[
+                  selectedComponent
+                ]
+              }
             </h2>
 
             <p className="mt-1 text-[10px] leading-relaxed text-white/30">
@@ -927,8 +1030,13 @@ function DiagnosticPanel({
       </div>
 
       {/* Telemetry */}
+
       <div className="border-b border-white/[0.07] p-5">
-        <PanelHeading icon={<Gauge className="h-3.5 w-3.5" />}>
+        <PanelHeading
+          icon={
+            <Gauge className="h-3.5 w-3.5" />
+          }
+        >
           Telemetry
         </PanelHeading>
 
@@ -938,30 +1046,34 @@ function DiagnosticPanel({
               No telemetry channels mapped.
             </div>
           ) : (
-            telemetryRows.map((row) => (
-              <div
-                key={row.key}
-                className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.018] px-3 py-2"
-              >
-                <span className="text-[10px] text-white/40">
-                  {row.label}
-                </span>
+            telemetryRows.map(
+              (row: TelemetryRow) => (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.018] px-3 py-2"
+                >
+                  <span className="text-[10px] text-white/40">
+                    {row.label}
+                  </span>
 
-                <span className="font-mono text-[10px] text-white/80">
-                  {row.formatted}
-                  {row.unit && (
-                    <span className="ml-1 text-white/25">
-                      {row.unit}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))
+                  <span className="font-mono text-[10px] text-white/80">
+                    {row.formatted}
+
+                    {row.unit && (
+                      <span className="ml-1 text-white/25">
+                        {row.unit}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            )
           )}
         </div>
       </div>
 
       {/* Fault */}
+
       {activeFault && (
         <div className="border-b border-white/[0.07] p-5">
           <PanelHeading
@@ -979,7 +1091,8 @@ function DiagnosticPanel({
               </span>
 
               <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-red-400">
-                {state.missionState === "RECOVERED"
+                {state.missionState ===
+                "RECOVERED"
                   ? "RECOVERED"
                   : "ACTIVE"}
               </span>
@@ -993,6 +1106,7 @@ function DiagnosticPanel({
                     className="flex gap-2 text-[9px] leading-relaxed text-white/35"
                   >
                     <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-red-400" />
+
                     {effect.description}
                   </div>
                 )
@@ -1003,6 +1117,7 @@ function DiagnosticPanel({
       )}
 
       {/* Causal propagation */}
+
       {activeFault && (
         <div className="border-b border-white/[0.07] p-5">
           <PanelHeading
@@ -1013,20 +1128,17 @@ function DiagnosticPanel({
             Causal Propagation
           </PanelHeading>
 
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-1">
             {activeFault.propagationChain.map(
-              (subsystemId, index) => (
+              (
+                subsystemId: SubsystemId,
+                index: number
+              ) => (
                 <div
                   key={`${subsystemId}-${index}`}
                   className="flex items-center"
                 >
-                  <button
-                    onClick={() =>
-                      onSelectAction &&
-                      undefined
-                    }
-                    className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5"
-                  >
+                  <div className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5">
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
                         index === 0
@@ -1038,10 +1150,11 @@ function DiagnosticPanel({
                     <span className="text-[9px] font-medium text-white/60">
                       {subsystemId}
                     </span>
-                  </button>
+                  </div>
 
                   {index <
-                    activeFault.propagationChain
+                    activeFault
+                      .propagationChain
                       .length -
                       1 && (
                     <ChevronRight className="mx-1 h-3 w-3 text-white/15" />
@@ -1065,10 +1178,10 @@ function DiagnosticPanel({
         </div>
       )}
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Intervention */}
+      {/* Isolation */}
+
       {canIsolate && (
         <div className="border-t border-white/[0.07] p-5">
           <Button
@@ -1081,15 +1194,20 @@ function DiagnosticPanel({
           </Button>
 
           <p className="mt-2 text-center text-[8px] text-white/20">
-            Confirm the simulated root-cause isolation.
+            Confirm the simulated root-cause
+            isolation.
           </p>
         </div>
       )}
 
+      {/* Recommended actions */}
+
       {canIntervene && activeFault && (
         <div className="border-t border-white/[0.07] p-5">
           <PanelHeading
-            icon={<ShieldCheck className="h-3.5 w-3.5" />}
+            icon={
+              <ShieldCheck className="h-3.5 w-3.5" />
+            }
           >
             Recommended Actions
           </PanelHeading>
@@ -1104,6 +1222,7 @@ function DiagnosticPanel({
                 return (
                   <button
                     key={action.id}
+                    type="button"
                     onClick={() =>
                       onSelectAction(action)
                     }
@@ -1166,9 +1285,9 @@ function SpacecraftStatusPanel({
 }: {
   health: HealthState;
   healthStyle: (typeof HEALTH_STYLES)[HealthState];
-  state: ReturnType<typeof useTwinState>["state"];
+  state: TwinState;
   connected: boolean;
-  telemetryError?: unknown;
+  telemetryError?: string | null;
   onReset: () => void;
 }) {
   return (
@@ -1198,26 +1317,33 @@ function SpacecraftStatusPanel({
       <div className="space-y-5 p-5">
         <div>
           <PanelHeading
-            icon={<Activity className="h-3.5 w-3.5" />}
+            icon={
+              <Activity className="h-3.5 w-3.5" />
+            }
           >
             Mission State
           </PanelHeading>
 
           <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.018] p-3">
             <div className="text-xs font-medium text-white/75">
-              {MISSION_STATE_LABELS[state.missionState]}
+              {MISSION_STATE_LABELS[
+                state.missionState
+              ] ?? state.missionState}
             </div>
 
             <p className="mt-1 text-[9px] leading-relaxed text-white/25">
-              Select a spacecraft component to inspect its
-              telemetry and health state.
+              Select a spacecraft component to
+              inspect its telemetry and health
+              state.
             </p>
           </div>
         </div>
 
         <div>
           <PanelHeading
-            icon={<Satellite className="h-3.5 w-3.5" />}
+            icon={
+              <Satellite className="h-3.5 w-3.5" />
+            }
           >
             Spacecraft
           </PanelHeading>
@@ -1230,19 +1356,21 @@ function SpacecraftStatusPanel({
 
             <MiniStat
               label="Active faults"
-              value={state.activeFaultId ? "1" : "0"}
+              value={
+                state.activeFaultId ? "1" : "0"
+              }
             />
 
             <MiniStat
               label="Telemetry"
-              value={connected ? "LIVE" : "OFFLINE"}
+              value={
+                connected ? "LIVE" : "OFFLINE"
+              }
             />
 
             <MiniStat
               label="View"
-              value={
-                state.viewMode.toUpperCase()
-              }
+              value={state.viewMode.toUpperCase()}
             />
           </div>
         </div>
@@ -1294,8 +1422,8 @@ function SpacecraftStatusPanel({
             </div>
 
             <p className="mt-1 text-[9px] leading-relaxed text-white/30">
-              The digital twin remains available using
-              the latest known state.
+              The digital twin remains available
+              using the latest known state.
             </p>
           </div>
         )}
@@ -1326,7 +1454,7 @@ function RecoveryPanel({
   telemetry,
   onReset,
 }: {
-  state: ReturnType<typeof useTwinState>["state"];
+  state: TwinState;
   recoveryPercent: number;
   telemetry: Record<string, unknown>;
   onReset: () => void;
@@ -1335,7 +1463,8 @@ function RecoveryPanel({
     state.missionState === "RECOVERED";
 
   const failed =
-    state.missionState === "RECOVERY_FAILED";
+    state.missionState ===
+    "RECOVERY_FAILED";
 
   const verifying =
     state.missionState === "VERIFICATION";
@@ -1419,58 +1548,65 @@ function RecoveryPanel({
 
       {state.recoveryProgress.length > 0 && (
         <div className="mt-5 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
-          {state.recoveryProgress.map((item) => (
-            <div
-              key={item.channel}
-              className="rounded-lg border border-white/[0.06] bg-white/[0.018] p-3"
-            >
-              <div className="text-[9px] text-white/30">
-                {item.label}
-              </div>
+          {state.recoveryProgress.map(
+            (item) => (
+              <div
+                key={item.channel}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.018] p-3"
+              >
+                <div className="text-[9px] text-white/30">
+                  {item.label}
+                </div>
 
-              <div className="mt-1 flex items-end justify-between gap-2">
-                <span className="font-mono text-xs text-white/75">
-                  {formatNumber(item.currentValue)}
-                </span>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <span className="font-mono text-xs text-white/75">
+                    {formatNumber(
+                      item.currentValue
+                    )}
+                  </span>
 
-                <span className="font-mono text-[9px] text-white/20">
-                  → {formatNumber(item.targetValue)}
-                </span>
-              </div>
+                  <span className="font-mono text-[9px] text-white/20">
+                    →{" "}
+                    {formatNumber(
+                      item.targetValue
+                    )}
+                  </span>
+                </div>
 
-              <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className={`h-full transition-all duration-300 ${
-                    item.recovered
-                      ? "bg-emerald-400"
-                      : "bg-cyan-300"
-                  }`}
-                  style={{
-                    width: `${
+                <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className={`h-full transition-all duration-300 ${
                       item.recovered
-                        ? 100
-                        : Math.min(
-                            95,
-                            Math.max(
-                              5,
-                              Math.abs(
-                                item.currentValue
-                              ) /
-                                Math.max(
-                                  Math.abs(
-                                    item.targetValue
-                                  ),
-                                  1
-                                ) *
-                                100
+                        ? "bg-emerald-400"
+                        : "bg-cyan-300"
+                    }`}
+                    style={{
+                      width: `${
+                        item.recovered
+                          ? 100
+                          : Math.min(
+                              95,
+                              Math.max(
+                                5,
+                                (Math.abs(
+                                  item.currentValue
+                                ) /
+                                  Math.max(
+                                    Math.abs(
+                                      item.targetValue
+                                    ),
+                                    1
+                                  )) *
+                                  100
+                              )
                             )
-                          )
-                    }%`,
-                  }}
-                />
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
 
@@ -1481,29 +1617,31 @@ function RecoveryPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {state.verificationResults.map((result) => (
-              <div
-                key={result.channel}
-                className={`flex items-center gap-1.5 rounded-md border px-2 py-1 ${
-                  result.passed
-                    ? "border-emerald-400/15 bg-emerald-400/[0.04] text-emerald-400"
-                    : "border-red-400/15 bg-red-400/[0.04] text-red-400"
-                }`}
-              >
-                {result.passed ? (
-                  <Check className="h-3 w-3" />
-                ) : (
-                  <AlertTriangle className="h-3 w-3" />
-                )}
-
-                <span className="text-[8px] uppercase tracking-[0.08em]">
-                  {result.channel.replace(
-                    /_/g,
-                    " "
+            {state.verificationResults.map(
+              (result) => (
+                <div
+                  key={result.channel}
+                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 ${
+                    result.passed
+                      ? "border-emerald-400/15 bg-emerald-400/[0.04] text-emerald-400"
+                      : "border-red-400/15 bg-red-400/[0.04] text-red-400"
+                  }`}
+                >
+                  {result.passed ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <AlertTriangle className="h-3 w-3" />
                   )}
-                </span>
-              </div>
-            ))}
+
+                  <span className="text-[8px] uppercase tracking-[0.08em]">
+                    {result.channel.replace(
+                      /_/g,
+                      " "
+                    )}
+                  </span>
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
@@ -1522,8 +1660,6 @@ function RecoveryPanel({
         </div>
       )}
 
-      {/* Avoid unused-variable linting when the telemetry object
-          is intentionally kept available for future verification UI. */}
       <span className="hidden">
         {Object.keys(telemetry).length}
       </span>
@@ -1559,26 +1695,31 @@ function FaultPropagationOverlay({
       </div>
 
       <div className="mt-3 flex items-center gap-1 overflow-x-auto">
-        {chain.map((subsystem, index) => (
-          <div
-            key={`${subsystem}-${index}`}
-            className="flex shrink-0 items-center gap-1"
-          >
+        {chain.map(
+          (
+            subsystem: SubsystemId,
+            index: number
+          ) => (
             <div
-              className={`rounded border px-2 py-1 text-[8px] font-medium ${
-                index === 0
-                  ? "border-red-400/25 bg-red-400/[0.08] text-red-300"
-                  : "border-amber-400/20 bg-amber-400/[0.05] text-amber-300"
-              }`}
+              key={`${subsystem}-${index}`}
+              className="flex shrink-0 items-center gap-1"
             >
-              {subsystem}
-            </div>
+              <div
+                className={`rounded border px-2 py-1 text-[8px] font-medium ${
+                  index === 0
+                    ? "border-red-400/25 bg-red-400/[0.08] text-red-300"
+                    : "border-amber-400/20 bg-amber-400/[0.05] text-amber-300"
+                }`}
+              >
+                {subsystem}
+              </div>
 
-            {index < chain.length - 1 && (
-              <ChevronRight className="h-3 w-3 text-white/20" />
-            )}
-          </div>
-        ))}
+              {index < chain.length - 1 && (
+                <ChevronRight className="h-3 w-3 text-white/20" />
+              )}
+            </div>
+          )
+        )}
       </div>
 
       <div className="mt-2 text-[8px] uppercase tracking-[0.1em] text-white/20">
@@ -1605,12 +1746,15 @@ function TimelineRow({
     | "critical"
     | "success";
 }) {
-  const severityClass = {
+  const severityClass: Record<
+    typeof severity,
+    string
+  > = {
     info: "bg-cyan-300",
     warning: "bg-amber-400",
     critical: "bg-red-400",
     success: "bg-emerald-400",
-  }[severity];
+  };
 
   return (
     <div className="flex items-center gap-3 border-b border-white/[0.035] px-4 py-2.5 last:border-b-0">
@@ -1621,7 +1765,7 @@ function TimelineRow({
       </span>
 
       <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${severityClass}`}
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${severityClass[severity]}`}
       />
 
       <span className="text-[9px] text-white/45">
@@ -1639,8 +1783,8 @@ function PanelHeading({
   icon,
   children,
 }: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ElementType } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import {
   Activity,
@@ -18,6 +18,15 @@ import {
 import { useTelemetry } from "@/hooks/use-telemetry";
 import { TelemetryChart } from "@/components/telemetry-chart";
 import { SubsystemStatus } from "@/components/subsystem-status";
+
+/* ─────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────── */
+
+type ChartPoint = {
+  sequence: number;
+  value: number;
+};
 
 /* ─────────────────────────────────────────────
    METRIC CARD
@@ -68,7 +77,7 @@ function SectionHeading({
   title,
   code,
 }: {
-  icon: ElementType;
+  icon: LucideIcon;
   title: string;
   code: string;
 }) {
@@ -112,35 +121,47 @@ export default function TelemetryPage() {
      HISTORY
   ───────────────────────────────────────────── */
 
-  const batteryVoltageHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.battery_voltage,
-  }));
+  const batteryVoltageHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.battery_voltage,
+    })
+  );
 
-  const batteryTemperatureHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.battery_temperature,
-  }));
+  const batteryTemperatureHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.battery_temperature,
+    })
+  );
 
-  const cpuHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.obc_cpu_utilization,
-  }));
+  const cpuHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.obc_cpu_utilization,
+    })
+  );
 
-  const obcTemperatureHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.obc_temperature,
-  }));
+  const obcTemperatureHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.obc_temperature,
+    })
+  );
 
-  const attitudeHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.attitude_error,
-  }));
+  const attitudeHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.attitude_error,
+    })
+  );
 
-  const rssiHistory = history.map((packet) => ({
-    sequence: packet.sequence,
-    value: packet.telemetry.rssi,
-  }));
+  const rssiHistory: ChartPoint[] = history.map(
+    (packet) => ({
+      sequence: packet.sequence,
+      value: packet.telemetry.rssi,
+    })
+  );
 
   return (
     <div className="quicksand min-h-[calc(100vh-4rem)] bg-[#05070d] px-5 py-8 text-white sm:px-7 lg:px-10 lg:py-10">
@@ -356,6 +377,7 @@ export default function TelemetryPage() {
 
         {data && (
           <>
+
             {/* ─────────────────────────────────────
                 SUBSYSTEM MATRIX
             ───────────────────────────────────── */}
@@ -634,6 +656,7 @@ export default function TelemetryPage() {
                 </span>
               </div>
             </footer>
+
           </>
         )}
       </div>
